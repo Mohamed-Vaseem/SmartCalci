@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>TALLY — Smart Voice Calculator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg-0:#08090a;
+  --bg-1:#0f0f11;
+  --device:#1b1b1e;
+  --device-edge:#2a2a2e;
+  --device-edge-lo:#0c0c0d;
+  --panel:#08090a;
+  --panel-edge:#1c1d1c;
+  --amber:#ffb454;
+  --amber-bright:#ffd08a;
+  --amber-dim:#7a5628;
+  --amber-glow:rgba(255,180,84,0.22);
+  --key-bg:#232327;
+  --key-bg-hi:#2b2b30;
+  --key-op:#2e2b26;
+  --key-op-hi:#3a352c;
+  --key-text:#e9e8ea;
+  --muted:#7d7d84;
+  --muted-2:#57575d;
+  --error:#ff6b6b;
+  --error-glow:rgba(255,107,107,0.25);
+  --font-display:'JetBrains Mono', monospace;
+  --font-ui:'Space Grotesk', sans-serif;
+}
+
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  min-height:100vh;
+  background:
+    radial-gradient(ellipse 900px 600px at 50% 0%, #16161a 0%, var(--bg-0) 60%),
+    var(--bg-0);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px 16px;
+  font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased;
+}
+
+/* faint instrument-panel texture */
+body::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size:26px 26px;
+  opacity:0.5;
+}
+
+.device{
+  position:relative;
+  width:380px;
+  max-width:100%;
+  background:linear-gradient(160deg, var(--device-edge) 0%, var(--device) 12%, var(--device) 88%, var(--device-edge-lo) 100%);
+  border-radius:28px;
+  padding:20px 18px 22px;
+  box-shadow:
+    0 40px 80px -20px rgba(0,0,0,0.7),
+    0 2px 0 rgba(255,255,255,0.04) inset,
+    0 -2px 0 rgba(0,0,0,0.5) inset;
+  border:1px solid rgba(255,255,255,0.04);
+}
+
+/* ---------- Header ---------- */
+.header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  padding:2px 6px 16px;
+}
+.wordmark{
+  font-family:var(--font-ui);
+  font-weight:700;
+  font-size:19px;
+  letter-spacing:0.08em;
+  color:var(--key-text);
+  line-height:1;
+}
+.wordmark span{color:var(--amber);}
+.subtitle{
+  margin-top:5px;
+  font-size:9.5px;
+  letter-spacing:0.16em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+  font-weight:500;
+}
+.status{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-top:3px;
+}
+.status-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--muted-2);
+  transition:background .25s ease, box-shadow .25s ease;
+}
+.status-dot.idle{background:var(--muted-2);}
+.status-dot.listening{
+  background:var(--amber);
+  box-shadow:0 0 8px 1px var(--amber-glow);
+  animation:blink 1s ease-in-out infinite;
+}
+.status-dot.error{
+  background:var(--error);
+  box-shadow:0 0 8px 1px var(--error-glow);
+}
+@keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+.status-label{
+  font-size:9px;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--muted);
+  font-weight:600;
+  text-align:right;
+}
+
+/* ---------- Display panel ---------- */
+.panel{
+  background:linear-gradient(180deg, var(--panel) 0%, #050506 100%);
+  border-radius:16px;
+  border:1px solid var(--panel-edge);
+  padding:16px 18px 14px;
+  box-shadow:
+    inset 0 2px 10px rgba(0,0,0,0.6),
+    inset 0 0 40px rgba(255,180,84,0.03);
+  position:relative;
+  overflow:hidden;
+}
+.tape{
+  min-height:36px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  margin-bottom:6px;
+}
+.tape-line{
+  font-family:var(--font-display);
+  font-size:11px;
+  text-align:right;
+  color:var(--muted-2);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  letter-spacing:0.01em;
+}
+.tape-line:last-child{color:var(--muted);}
+
+.display-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  min-height:52px;
+  cursor:pointer;
+  user-select:none;
+}
+.display-row:active{opacity:0.85;}
+#display{
+  font-family:var(--font-display);
+  font-weight:600;
+  font-size:clamp(24px, 8vw, 40px);
+  color:var(--amber-bright);
+  text-shadow:0 0 18px var(--amber-glow);
+  letter-spacing:0.01em;
+  line-height:1;
+  transition:color .2s ease, text-shadow .2s ease;
+  word-break:break-all;
+  text-align:right;
+}
+#display.error{
+  color:var(--error);
+  text-shadow:0 0 18px var(--error-glow);
+  font-size:clamp(18px, 6vw, 26px);
+}
+.backspace-hint{
+  position:absolute;
+  bottom:6px;
+  left:18px;
+  font-size:8.5px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+  opacity:0;
+  transition:opacity .2s ease;
+}
+.panel:hover .backspace-hint{opacity:0.7;}
+
+/* ---------- Voice band ---------- */
+.voice-band{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin:16px 4px 14px;
+  padding:10px 14px 10px 10px;
+  border-radius:14px;
+  background:rgba(255,255,255,0.02);
+  border:1px solid rgba(255,255,255,0.035);
+}
+.mic-dial{
+  position:relative;
+  width:52px;
+  height:52px;
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  background:transparent;
+  border:none;
+  padding:0;
+}
+.mic-ring{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  border:1.5px solid var(--amber-dim);
+  transition:border-color .25s ease, box-shadow .25s ease;
+}
+.mic-core{
+  position:relative;
+  width:38px;
+  height:38px;
+  border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, var(--key-bg-hi), var(--key-bg) 70%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  transition:background .25s ease, box-shadow .25s ease;
+}
+.mic-core svg{width:17px;height:17px;stroke:var(--muted);transition:stroke .25s ease;}
+.mic-dial.listening .mic-ring{
+  border-color:var(--amber);
+  box-shadow:0 0 0 0 var(--amber-glow);
+}
+.mic-dial.listening .mic-core{
+  background:radial-gradient(circle at 35% 30%, var(--amber-bright), var(--amber) 70%);
+  box-shadow:0 0 14px 2px var(--amber-glow);
+}
+.mic-dial.listening .mic-core svg{stroke:#1a1408;}
+.pulse{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  border:1.5px solid var(--amber);
+  opacity:0;
+}
+.mic-dial.listening .pulse{animation:pulseOut 1.6s ease-out infinite;}
+.mic-dial.listening .pulse.p2{animation-delay:.5s;}
+.mic-dial.listening .pulse.p3{animation-delay:1s;}
+@keyframes pulseOut{
+  0%{transform:scale(1); opacity:0.55;}
+  100%{transform:scale(2.1); opacity:0;}
+}
+.mic-dial.unsupported{cursor:not-allowed; opacity:0.4;}
+.mic-dial:focus-visible .mic-ring{outline:2px solid var(--amber); outline-offset:2px;}
+
+.voice-copy{
+  flex:1;
+  min-width:0;
+}
+.voice-caption{
+  font-size:11.5px;
+  color:var(--muted);
+  line-height:1.35;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.voice-hint{
+  margin-top:2px;
+  font-size:9px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+  font-weight:500;
+}
+
+/* ---------- Keypad ---------- */
+.keypad{
+  display:grid;
+  grid-template-columns:repeat(4, 1fr);
+  gap:9px;
+}
+.key{
+  position:relative;
+  height:58px;
+  border-radius:13px;
+  border:none;
+  background:linear-gradient(180deg, var(--key-bg-hi) 0%, var(--key-bg) 100%);
+  color:var(--key-text);
+  font-family:var(--font-ui);
+  font-size:19px;
+  font-weight:600;
+  cursor:pointer;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.05) inset,
+    0 3px 0 rgba(0,0,0,0.35),
+    0 4px 8px rgba(0,0,0,0.25);
+  transition:transform .06s ease, box-shadow .06s ease, background .15s ease;
+}
+.key:active{
+  transform:translateY(2px);
+  box-shadow:0 1px 0 rgba(255,255,255,0.03) inset, 0 1px 0 rgba(0,0,0,0.3);
+}
+.key:focus-visible{outline:2px solid var(--amber); outline-offset:2px;}
+.key.op{
+  background:linear-gradient(180deg, var(--key-op-hi) 0%, var(--key-op) 100%);
+  color:var(--amber-bright);
+  font-size:20px;
+}
+.key.fn{
+  color:var(--muted);
+  font-size:15px;
+  font-weight:600;
+  letter-spacing:0.02em;
+}
+.key.equals{
+  background:linear-gradient(180deg, var(--amber-bright) 0%, var(--amber) 100%);
+  color:#1a1408;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.3) inset,
+    0 3px 0 var(--amber-dim),
+    0 4px 12px var(--amber-glow);
+}
+.key.equals:active{box-shadow:0 1px 0 rgba(255,255,255,0.2) inset, 0 1px 0 var(--amber-dim);}
+.key.zero{grid-column:span 1;}
+
+@media (max-width:360px){
+  .device{padding:16px 12px 18px;}
+  .key{height:52px; font-size:17px;}
+}
+
+.footer-note{
+  text-align:center;
+  margin-top:16px;
+  font-size:9px;
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  color:var(--muted-2);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .status-dot.listening, .mic-dial.listening .pulse{animation:none;}
+}
+</style>
+</head>
+<body>
+
+<div class="device">
+  <div class="header">
+    <div>
+      <div class="wordmark">TALLY<span>.</span></div>
+      <div class="subtitle">Smart Voice Calculator</div>
+    </div>
+    <div>
+      <div class="status">
+        <span class="status-dot idle" id="statusDot"></span>
+        <span class="status-label" id="statusLabel">Idle</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="tape" id="tape"></div>
+    <div class="display-row" id="displayRow" title="Tap to erase last character">
+      <span id="display">0</span>
+    </div>
+    <span class="backspace-hint">Tap display to erase</span>
+  </div>
+
+  <div class="voice-band">
+    <button class="mic-dial" id="micDial" aria-label="Toggle voice control">
+      <span class="pulse p1"></span>
+      <span class="pulse p2"></span>
+      <span class="pulse p3"></span>
+      <span class="mic-ring"></span>
+      <span class="mic-core">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+          <line x1="12" y1="19" x2="12" y2="22"/>
+        </svg>
+      </span>
+    </button>
+    <div class="voice-copy">
+      <div class="voice-caption" id="voiceCaption">Tap the mic and say "twelve plus ten"</div>
+      <div class="voice-hint">Plus · Minus · Multiply · Divide</div>
+    </div>
+  </div>
+
+  <div class="keypad">
+    <button class="key fn" data-action="clear">C</button>
+    <button class="key fn" data-action="paren-open">(</button>
+    <button class="key fn" data-action="paren-close">)</button>
+    <button class="key op" data-action="op" data-val="÷">÷</button>
+
+    <button class="key" data-action="num" data-val="7">7</button>
+    <button class="key" data-action="num" data-val="8">8</button>
+    <button class="key" data-action="num" data-val="9">9</button>
+    <button class="key op" data-action="op" data-val="×">×</button>
+
+    <button class="key" data-action="num" data-val="4">4</button>
+    <button class="key" data-action="num" data-val="5">5</button>
+    <button class="key" data-action="num" data-val="6">6</button>
+    <button class="key op" data-action="op" data-val="−">−</button>
+
+    <button class="key" data-action="num" data-val="1">1</button>
+    <button class="key" data-action="num" data-val="2">2</button>
+    <button class="key" data-action="num" data-val="3">3</button>
+    <button class="key op" data-action="op" data-val="+">+</button>
+
+    <button class="key fn" data-action="percent">%</button>
+    <button class="key zero" data-action="num" data-val="0">0</button>
+    <button class="key fn" data-action="decimal">.</button>
+    <button class="key equals" data-action="equals">=</button>
+  </div>
+
+  <div class="footer-note">Voice · Keyboard · Touch</div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- State ----------------
+  let expression = "";
+  let justEvaluated = false;
+  let isError = false;
+  const tapeHistory = [];
+
+  const displayEl = document.getElementById('display');
+  const tapeEl = document.getElementById('tape');
+  const displayRow = document.getElementById('displayRow');
+  const captionEl = document.getElementById('voiceCaption');
+  const statusDot = document.getElementById('statusDot');
+  const statusLabel = document.getElementById('statusLabel');
+  const micDial = document.getElementById('micDial');
+
+  function updateDisplay(){
+    displayEl.classList.toggle('error', isError);
+    displayEl.textContent = expression === "" ? "0" : expression;
+  }
+
+  function renderTape(){
+    tapeEl.innerHTML = "";
+    tapeHistory.slice(-3).forEach(line=>{
+      const div = document.createElement('div');
+      div.className = 'tape-line';
+      div.textContent = line;
+      tapeEl.appendChild(div);
+    });
+  }
+
+  function setStatus(state, label){
+    statusDot.className = 'status-dot ' + state;
+    statusLabel.textContent = label;
+  }
+
+  function setCaption(text){
+    captionEl.textContent = text;
+  }
+
+  function showError(msg){
+    isError = true;
+    expression = msg;
+    updateDisplay();
+    setTimeout(()=>{
+      isError = false;
+      expression = "";
+      justEvaluated = false;
+      updateDisplay();
+    }, 1400);
+  }
+
+  // ---------------- Expression editing ----------------
+  function clearAll(){
+    expression = "";
+    isError = false;
+    justEvaluated = false;
+    updateDisplay();
+  }
+
+  function backspace(){
+    if(isError){ clearAll(); return; }
+    expression = expression.slice(0, -1);
+    justEvaluated = false;
+    updateDisplay();
+  }
+
+  function isOperatorChar(c){ return c === '+' || c === '−' || c === '×' || c === '÷'; }
+
+  function appendNumber(d){
+    if(isError) clearAll();
+    if(justEvaluated){ expression = ""; justEvaluated = false; }
+    // avoid leading zeros like 00
+    if(expression === "0") expression = "";
+    // guard against a digit right after a closing paren without operator (allow implicit? keep simple, just append)
+    expression += d;
+    updateDisplay();
+  }
+
+  function appendDecimal(){
+    if(isError) clearAll();
+    if(justEvaluated){ expression = "0"; justEvaluated = false; }
+    // find current number segment (after last operator/paren)
+    const segment = expression.split(/[+−×÷(]/).pop();
+    if(segment.includes('.')) return;
+    if(expression === "" || isOperatorChar(expression.slice(-1)) || expression.slice(-1) === '('){
+      expression += "0.";
+    } else {
+      expression += ".";
+    }
+    updateDisplay();
+  }
+
+  function appendOperator(op){
+    if(isError) clearAll();
+    justEvaluated = false;
+    if(expression === ""){
+      if(op === '−'){ expression = '−'; updateDisplay(); }
+      return;
+    }
+    const last = expression.slice(-1);
+    if(isOperatorChar(last)){
+      expression = expression.slice(0, -1) + op;
+    } else {
+      expression += op;
+    }
+    updateDisplay();
+  }
+
+  function appendParen(which){
+    if(isError) clearAll();
+    if(justEvaluated){ expression = ""; justEvaluated = false; }
+    if(which === '('){
+      const last = expression.slice(-1);
+      if(last && (/[0-9)]/.test(last))){
+        expression += '×(';
+      } else {
+        expression += '(';
+      }
+    } else {
+      const opens = (expression.match(/\(/g)||[]).length;
+      const closes = (expression.match(/\)/g)||[]).length;
+      if(opens > closes && /[0-9)]/.test(expression.slice(-1))){
+        expression += ')';
+      }
+    }
+    updateDisplay();
+  }
+
+  function appendPercent(){
+    if(isError) clearAll();
+    const last = expression.slice(-1);
+    if(/[0-9]/.test(last)) expression += '%';
+    updateDisplay();
+  }
+
+  // ---------------- Evaluator (tokenize -> shunting yard -> RPN eval) ----------------
+  function tokenize(expr){
+    const tokens = [];
+    let i = 0;
+    while(i < expr.length){
+      const c = expr[i];
+      if(c === ' '){ i++; continue; }
+      if(/[0-9.]/.test(c)){
+        let num = "";
+        while(i < expr.length && /[0-9.]/.test(expr[i])){ num += expr[i]; i++; }
+        tokens.push({type:'num', value: parseFloat(num)});
+        continue;
+      }
+      if(c === '%'){
+        if(tokens.length && tokens[tokens.length-1].type === 'num'){
+          tokens[tokens.length-1].value /= 100;
+        }
+        i++; continue;
+      }
+      if(c === '('){ tokens.push({type:'lparen'}); i++; continue; }
+      if(c === ')'){ tokens.push({type:'rparen'}); i++; continue; }
+      if('+−×÷'.includes(c)){
+        // unary minus handling: if − is at start or follows an operator/lparen, treat as negative sign
+        const prev = tokens[tokens.length-1];
+        if(c === '−' && (!prev || prev.type === 'op' || prev.type === 'lparen')){
+          let num = "−";
+          i++;
+          while(i < expr.length && /[0-9.]/.test(expr[i])){ num += expr[i]; i++; }
+          tokens.push({type:'num', value: parseFloat(num.replace('−','-')) || 0});
+          continue;
+        }
+        tokens.push({type:'op', value:c});
+        i++; continue;
+      }
+      i++; // skip unrecognized char
+    }
+    return tokens;
+  }
+
+  function toRPN(tokens){
+    const prec = {'+':1, '−':1, '×':2, '÷':2};
+    const output = [];
+    const ops = [];
+    for(const t of tokens){
+      if(t.type === 'num'){ output.push(t); }
+      else if(t.type === 'op'){
+        while(ops.length && ops[ops.length-1].type === 'op' && prec[ops[ops.length-1].value] >= prec[t.value]){
+          output.push(ops.pop());
+        }
+        ops.push(t);
+      } else if(t.type === 'lparen'){
+        ops.push(t);
+      } else if(t.type === 'rparen'){
+        while(ops.length && ops[ops.length-1].type !== 'lparen'){
+          output.push(ops.pop());
+        }
+        ops.pop();
+      }
+    }
+    while(ops.length) output.push(ops.pop());
+    return output;
+  }
+
+  function evalRPN(rpn){
+    const st = [];
+    for(const t of rpn){
+      if(t.type === 'num'){ st.push(t.value); }
+      else {
+        const b = st.pop(), a = st.pop();
+        let r;
+        switch(t.value){
+          case '+': r = a + b; break;
+          case '−': r = a - b; break;
+          case '×': r = a * b; break;
+          case '÷': r = (b === 0) ? NaN : a / b; break;
+        }
+        st.push(r);
+      }
+    }
+    return st.pop();
+  }
+
+  function formatResult(num){
+    if(!isFinite(num)) return NaN;
+    const rounded = Math.round((num + Number.EPSILON) * 1e9) / 1e9;
+    return rounded;
+  }
+
+  function evaluate(){
+    if(!expression || isError) return;
+    try{
+      const tokens = tokenize(expression);
+      if(!tokens.length) return;
+      const rpn = toRPN(tokens);
+      const raw = evalRPN(rpn);
+      const result = formatResult(raw);
+      if(result === undefined || Number.isNaN(result) || !isFinite(result)){
+        showError('ERROR');
+        return;
+      }
+      const displayResult = result.toLocaleString(undefined, {maximumFractionDigits:8});
+      tapeHistory.push(expression + ' = ' + displayResult);
+      renderTape();
+      expression = String(result);
+      justEvaluated = true;
+      updateDisplay();
+    } catch(e){
+      showError('ERROR');
+    }
+  }
+
+  // ---------------- Keypad wiring ----------------
+  document.querySelectorAll('.key').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const action = btn.dataset.action;
+      const val = btn.dataset.val;
+      if(action === 'num') appendNumber(val);
+      else if(action === 'op') appendOperator(val);
+      else if(action === 'decimal') appendDecimal();
+      else if(action === 'percent') appendPercent();
+      else if(action === 'paren-open') appendParen('(');
+      else if(action === 'paren-close') appendParen(')');
+      else if(action === 'clear') clearAll();
+      else if(action === 'equals') evaluate();
+    });
+  });
+
+  displayRow.addEventListener('click', backspace);
+
+  // ---------------- Keyboard support ----------------
+  window.addEventListener('keydown', (e)=>{
+    if(/^[0-9]$/.test(e.key)) appendNumber(e.key);
+    else if(e.key === '.') appendDecimal();
+    else if(e.key === '+') appendOperator('+');
+    else if(e.key === '-') appendOperator('−');
+    else if(e.key === '*') appendOperator('×');
+    else if(e.key === '/'){ e.preventDefault(); appendOperator('÷'); }
+    else if(e.key === '%') appendPercent();
+    else if(e.key === '('){ appendParen('('); }
+    else if(e.key === ')'){ appendParen(')'); }
+    else if(e.key === 'Enter' || e.key === '='){ e.preventDefault(); evaluate(); }
+    else if(e.key === 'Backspace') backspace();
+    else if(e.key === 'Escape') clearAll();
+  });
+
+  // ---------------- Voice control ----------------
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let listening = false;
+
+  const UNITS = {zero:0,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,
+    ten:10,eleven:11,twelve:12,thirteen:13,fourteen:14,fifteen:15,sixteen:16,seventeen:17,eighteen:18,nineteen:19};
+  const TENS = {twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+
+  function wordsToInt(tokens){
+    let total = 0, current = 0, any = false;
+    for(const t of tokens){
+      if(t in UNITS){ current += UNITS[t]; any = true; }
+      else if(t in TENS){ current += TENS[t]; any = true; }
+      else if(t === 'hundred'){ current = (current || 1) * 100; any = true; }
+      else if(t === 'thousand'){ total += (current || 1) * 1000; current = 0; any = true; }
+      else if(/^\d+$/.test(t)){ current += parseInt(t,10); any = true; }
+    }
+    return any ? total + current : null;
+  }
+
+  function wordsToNumber(str){
+    str = str.trim().toLowerCase().replace(/[^a-z0-9.\s]/g, ' ').replace(/\s+/g,' ').trim();
+    if(!str) return null;
+    if(/^-?\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+    let tokens = str.split(' ').filter(t=>t && t !== 'and');
+    if(tokens.includes('point')){
+      const idx = tokens.indexOf('point');
+      const intTokens = tokens.slice(0, idx);
+      const fracTokens = tokens.slice(idx+1);
+      const intVal = intTokens.length ? (wordsToInt(intTokens) || 0) : 0;
+      let fracStr = '';
+      for(const t of fracTokens){
+        if(t in UNITS && UNITS[t] < 10) fracStr += String(UNITS[t]);
+        else if(/^\d$/.test(t)) fracStr += t;
+      }
+      const fracVal = fracStr ? parseFloat('0.' + fracStr) : 0;
+      return intVal + fracVal;
+    }
+    return wordsToInt(tokens);
+  }
+
+  const OPERATOR_PATTERNS = [
+    {re:/\bdivided by\b|\bdivide by\b|\bdivided\b|\bdivide\b|\bover\b/, sym:'÷'},
+    {re:/\bmultiplied by\b|\bmultiply by\b|\bmultiplied\b|\bmultiply\b|\bmultiple\b|\btimes\b|\binto\b/, sym:'×'},
+    {re:/\btake away\b|\bsubtracted by\b|\bsubtract\b|\bminus\b/, sym:'−'},
+    {re:/\badded to\b|\badd\b|\bplus\b/, sym:'+'},
+  ];
+
+  function findOperator(text){
+    let best = null;
+    for(const p of OPERATOR_PATTERNS){
+      const m = p.re.exec(text);
+      if(m && (best === null || m.index < best.index)){
+        best = {index:m.index, end:m.index + m[0].length, sym:p.sym};
+      }
+    }
+    return best;
+  }
+
+  function handleVoiceResult(transcript){
+    const raw = transcript.trim();
+    const lower = raw.toLowerCase();
+    if(!raw) return;
+
+    if(/\b(clear everything|reset|start over|clear all)\b/.test(lower)){
+      clearAll();
+      setCaption('Cleared');
+      return;
+    }
+    if(/\b(delete|backspace|remove that|undo)\b/.test(lower)){
+      backspace();
+      setCaption('Deleted last entry');
+      return;
+    }
+    if(/^\s*(equals?|calculate|solve|what'?s the (result|answer))\b/.test(lower) && expression){
+      evaluate();
+      setCaption('Calculated');
+      return;
+    }
+
+    const op = findOperator(lower);
+    if(op){
+      const leftStr = lower.slice(0, op.index);
+      const rightStr = lower.slice(op.end);
+      const leftNum = wordsToNumber(leftStr);
+      const rightNum = wordsToNumber(rightStr);
+      if(leftNum !== null && rightNum !== null){
+        expression = String(leftNum) + op.sym + String(rightNum);
+        justEvaluated = false;
+        updateDisplay();
+        evaluate();
+        setCaption('Heard "' + raw + '"');
+        return;
+      }
+    }
+
+    // fall back: maybe it's just a number, load it in
+    const single = wordsToNumber(lower);
+    if(single !== null){
+      if(justEvaluated){ expression = ""; justEvaluated = false; }
+      expression += String(single);
+      updateDisplay();
+      setCaption('Heard "' + raw + '"');
+      return;
+    }
+
+    setCaption('Didn\u2019t catch a calculation in "' + raw + '"');
+  }
+
+  if(SpeechRecognitionImpl){
+    recognition = new SpeechRecognitionImpl();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = ()=>{
+      listening = true;
+      micDial.classList.add('listening');
+      setStatus('listening', 'Listening');
+      setCaption('Listening…');
+    };
+
+    recognition.onresult = (event)=>{
+      let interim = '';
+      let final = '';
+      for(let i = event.resultIndex; i < event.results.length; i++){
+        const t = event.results[i][0].transcript;
+        if(event.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      if(interim) setCaption(interim + ' …');
+      if(final) handleVoiceResult(final);
+    };
+
+    recognition.onerror = (event)=>{
+      listening = false;
+      micDial.classList.remove('listening');
+      if(event.error === 'not-allowed' || event.error === 'service-not-allowed'){
+        setStatus('error', 'Mic blocked');
+        setCaption('Microphone access was blocked — allow it in your browser to use voice control');
+      } else if(event.error === 'no-speech'){
+        setStatus('idle', 'Idle');
+        setCaption('Didn\u2019t hear anything — tap the mic and try again');
+      } else {
+        setStatus('idle', 'Idle');
+        setCaption('Voice control hit a snag — tap the mic to retry');
+      }
+    };
+
+    recognition.onend = ()=>{
+      listening = false;
+      micDial.classList.remove('listening');
+      if(statusLabel.textContent === 'Listening') setStatus('idle', 'Idle');
+    };
+
+    micDial.addEventListener('click', ()=>{
+      if(listening){
+        recognition.stop();
+        return;
+      }
+      try{
+        recognition.start();
+      } catch(e){ /* already started */ }
+    });
+  } else {
+    micDial.classList.add('unsupported');
+    micDial.setAttribute('aria-disabled', 'true');
+    setCaption('Voice control needs Chrome or Edge on this device');
+    setStatus('idle', 'No voice');
+  }
+
+  updateDisplay();
+})();
+</script>
+</body>
+</html>
