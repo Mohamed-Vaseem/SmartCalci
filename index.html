@@ -219,9 +219,9 @@ body::before{
 /* ---------- Display panel ---------- */
 .panel{
   background:linear-gradient(180deg, var(--panel) 0%, #f2f2f4 100%);
-  border-radius:16px;
+  border-radius:18px;
   border:1px solid var(--panel-edge);
-  padding:16px 18px 14px;
+  padding:22px 20px 20px;
   box-shadow:
     inset 0 2px 8px rgba(0,0,0,0.05),
     inset 0 0 30px rgba(255,138,61,0.04);
@@ -229,11 +229,11 @@ body::before{
   overflow:hidden;
 }
 .tape{
-  min-height:36px;
+  min-height:40px;
   display:flex;
   flex-direction:column;
   gap:2px;
-  margin-bottom:6px;
+  margin-bottom:8px;
 }
 .tape-line{
   font-family:var(--font-display);
@@ -251,15 +251,17 @@ body::before{
   display:flex;
   align-items:flex-end;
   justify-content:flex-end;
-  min-height:52px;
+  flex-wrap:wrap;
+  min-height:88px;
   cursor:pointer;
   user-select:none;
+  gap:2px 8px;
 }
 .display-row:active{opacity:0.85;}
 #display{
   font-family:var(--font-display);
   font-weight:600;
-  font-size:clamp(24px, 8vw, 40px);
+  font-size:clamp(28px, 9vw, 46px);
   color:var(--amber-bright);
   text-shadow:0 0 18px var(--amber-glow);
   letter-spacing:0.01em;
@@ -272,6 +274,15 @@ body::before{
   color:var(--error);
   text-shadow:0 0 18px var(--error-glow);
   font-size:clamp(18px, 6vw, 26px);
+}
+.live-preview{
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:clamp(15px, 4.4vw, 22px);
+  color:var(--muted);
+  letter-spacing:0.01em;
+  line-height:1;
+  opacity:0.85;
 }
 .backspace-hint{
   position:absolute;
@@ -475,7 +486,7 @@ body::before{
   <div class="panel">
     <div class="tape" id="tape"></div>
     <div class="display-row" id="displayRow" title="Tap to erase last character">
-      <span id="display">0</span>
+      <span id="display">0</span><span id="livePreview" class="live-preview"></span>
     </div>
     <span class="backspace-hint">Tap display to erase</span>
   </div>
@@ -557,6 +568,7 @@ body::before{
   const tapeHistory = [];
 
   const displayEl = document.getElementById('display');
+  const livePreviewEl = document.getElementById('livePreview');
   const tapeEl = document.getElementById('tape');
   const displayRow = document.getElementById('displayRow');
   const captionEl = document.getElementById('voiceCaption');
@@ -567,6 +579,29 @@ body::before{
   function updateDisplay(){
     displayEl.classList.toggle('error', isError);
     displayEl.textContent = expression === "" ? "0" : expression;
+    if(isError || justEvaluated || expression === ""){
+      livePreviewEl.textContent = "";
+      return;
+    }
+    const preview = computeLivePreview(expression);
+    livePreviewEl.textContent = (preview !== null && preview !== expression) ? ('=' + preview) : "";
+  }
+
+  function computeLivePreview(expr){
+    const last = expr.slice(-1);
+    if(isOperatorChar(last) || last === '(') return null;
+    if(!/[+−×÷]/.test(expr)) return null;
+    try{
+      const tokens = tokenize(expr);
+      if(!tokens.length) return null;
+      const rpn = toRPN(tokens);
+      const raw = evalRPN(rpn);
+      const result = formatResult(raw);
+      if(result === undefined || Number.isNaN(result) || !isFinite(result)) return null;
+      return result.toLocaleString(undefined, {maximumFractionDigits:8});
+    } catch(e){
+      return null;
+    }
   }
 
   function renderTape(){
